@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import Toplevel, messagebox
 import threading
 import requests
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # OpenWeatherMap API setup (replace with your own API key)
 API_KEY = "794eac17c9d7cb5fb86e532d70237cf8"
@@ -10,26 +12,46 @@ BASE_URL = "http://api.openweathermap.org/data/2.5/weather"
 # Global list to keep track of all timer threads
 active_timers = []
 
-def fetch_and_display_weather(location, weather_window):
+def fetch_weather_with_timing(location):
+    start_time = time.time()
     try:
         # Request weather data
         response = requests.get(BASE_URL, params={"q": location, "appid": API_KEY, "units": "metric"})
         data = response.json()
 
+        end_time = time.time()
+        execution_time = end_time - start_time
+
         if response.status_code == 200:
             temperature = data["main"]["temp"]
             humidity = data["main"]["humidity"]
             pressure = data["main"]["pressure"]
-            weather_data = f"Location: {location}\nTemperature: {temperature}°C\nHumidity: {humidity}%\nPressure: {pressure}"
+            weather_data = (f"Location: {location}\n"
+                            f"Temperature: {temperature}°C\n"
+                            f"Humidity: {humidity}%\n"
+                            f"Pressure: {pressure}\n"
+                            f"Execution Time: {execution_time:.4f} seconds")
         else:
             weather_data = f"Location: {location}\nError: Unable to fetch data."
     except Exception as e:
-        weather_data = f"Location: {location}\nError: {e}"
+        end_time = time.time()
+        execution_time = end_time - start_time
+        weather_data = f"Location: {location}\nError: {e}\nExecution Time: {execution_time:.4f} seconds"
+    
+    return location, weather_data
 
-    # Check if the window still exists before updating
-    if weather_window.winfo_exists():
-        weather_window.config(bg="#f0f0f0")
-        weather_window.children["label"].config(text=weather_data)
+def fetch_and_display_weather(location, weather_window):
+    try:
+        # Fetch weather data with timing
+        _, weather_data = fetch_weather_with_timing(location)
+
+        # Check if the window still exists before updating
+        if weather_window.winfo_exists():
+            weather_window.config(bg="#f0f0f0")
+            weather_window.children["label"].config(text=weather_data)
+    except Exception as e:
+        if weather_window.winfo_exists():
+            weather_window.children["label"].config(text=f"Error: {e}")
 
 def periodic_weather_update(location, weather_window, interval=60):
     # Check if the window is still open before updating
@@ -42,19 +64,42 @@ def periodic_weather_update(location, weather_window, interval=60):
 
 def run_weather_app():
     def process_weather_data(locations):
+        # Record overall start time
+
+
+        # Create windows for each location
+        weather_windows = {}
         for location in locations:
             # Create a new weather window for each location
             weather_window = Toplevel(root)
             weather_window.title(f"Weather Data - {location}")
-            weather_window.geometry("300x200")
+            weather_window.geometry("300x250")
             weather_window.config(bg="#f0f0f0")
 
             label = tk.Label(weather_window, text="Fetching data...", font=("Arial", 12), bg="#f0f0f0", justify=tk.LEFT)
             label.pack(pady=20, padx=20)
             weather_window.children["label"] = label  # Save reference to the label for future updates
 
-            # Start periodic updates for this location's weather data
-            periodic_weather_update(location, weather_window, 60)
+            weather_windows[location] = weather_window
+
+        overall_start_time = time.time()
+        threads = []
+        for location in locations:
+            thread = threading.Thread(target=fetch_weather_with_timing, args=(location,))
+            threads.append(thread)
+            thread.start()
+
+        for thread in threads:
+            thread.join()
+
+        # Calculate and display overall execution time
+        overall_end_time = time.time()
+        overall_execution_time = overall_end_time - overall_start_time
+        print(overall_execution_time)
+
+        # Start periodic updates for each location's weather data
+        for location in locations:
+            periodic_weather_update(location, weather_windows[location], 60)
 
     def start_aggregation():
         try:
@@ -64,7 +109,7 @@ def run_weather_app():
             active_timers.clear()
 
             num_threads = int(thread_input.get())
-            if 1 <= num_threads <= 5:
+            if 1 <= num_threads <= 4:
                 # Clear any previously entered location entries
                 for widget in location_entries_frame.winfo_children():
                     widget.destroy()
@@ -85,7 +130,7 @@ def run_weather_app():
                 submit_button.pack(pady=20)
 
             else:
-                messagebox.showerror("Input Error", "Please enter a number between 1 and 5.")
+                messagebox.showerror("Input Error", "Please enter a number between 1 and 4.")
         except ValueError:
             messagebox.showerror("Input Error", "Please enter a valid number.")
 
@@ -108,7 +153,7 @@ def run_weather_app():
     title_label = tk.Label(root, text="Weather Data Aggregator", font=("Arial", 18, "bold"), bg="#f0f0f0", fg="#4CAF50")
     title_label.pack(pady=20)
 
-    thread_label = tk.Label(root, text="Enter number of threads (1-5):", font=("Arial", 12), bg="#f0f0f0")
+    thread_label = tk.Label(root, text="Enter number of threads (1-4):", font=("Arial", 12), bg="#f0f0f0")
     thread_label.pack(pady=10)
 
     thread_input = tk.Entry(root, font=("Arial", 12), width=10)
