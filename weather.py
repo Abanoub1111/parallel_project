@@ -14,44 +14,35 @@ active_timers = []
 
 def fetch_weather_with_timing(location):
     start_time = time.time()
-    try:
-        # Request weather data
-        response = requests.get(BASE_URL, params={"q": location, "appid": API_KEY, "units": "metric"})
-        data = response.json()
 
-        end_time = time.time()
-        execution_time = end_time - start_time
+    response = requests.get(BASE_URL, params={"q": location, "appid": API_KEY, "units": "metric"})
+    data = response.json()
 
-        if response.status_code == 200:
-            temperature = data["main"]["temp"]
-            humidity = data["main"]["humidity"]
-            pressure = data["main"]["pressure"]
-            weather_data = (f"Location: {location}\n"
-                            f"Temperature: {temperature}°C\n"
-                            f"Humidity: {humidity}%\n"
-                            f"Pressure: {pressure}\n"
-                            f"Execution Time: {execution_time:.4f} seconds")
-        else:
-            weather_data = f"Location: {location}\nError: Unable to fetch data."
-    except Exception as e:
-        end_time = time.time()
-        execution_time = end_time - start_time
-        weather_data = f"Location: {location}\nError: {e}\nExecution Time: {execution_time:.4f} seconds"
-    
+    end_time = time.time()
+    execution_time = end_time - start_time
+
+    if response.status_code == 200:
+        temperature = data["main"]["temp"]
+        humidity = data["main"]["humidity"]
+        pressure = data["main"]["pressure"]
+        weather_data = (f"Location: {location}\n"
+                        f"Temperature: {temperature}°C\n"
+                        f"Humidity: {humidity}%\n"
+                        f"Pressure: {pressure}\n"
+                        f"Execution Time: {execution_time:.8f} seconds")
+    else:
+        weather_data = f"Location: {location}\nError: Unable to fetch data."
     return location, weather_data
 
 def fetch_and_display_weather(location, weather_window):
-    try:
-        # Fetch weather data with timing
-        _, weather_data = fetch_weather_with_timing(location)
 
-        # Check if the window still exists before updating
-        if weather_window.winfo_exists():
-            weather_window.config(bg="#f0f0f0")
-            weather_window.children["label"].config(text=weather_data)
-    except Exception as e:
-        if weather_window.winfo_exists():
-            weather_window.children["label"].config(text=f"Error: {e}")
+    # Fetch weather data with timing
+    weather_data = fetch_weather_with_timing(location)
+
+    # Check if the window still exists before updating
+    if weather_window.winfo_exists():
+        weather_window.config(bg="#f0f0f0")
+        weather_window.children["label"].config(text=weather_data)
 
 def periodic_weather_update(location, weather_window, interval=60):
     # Check if the window is still open before updating
@@ -64,9 +55,6 @@ def periodic_weather_update(location, weather_window, interval=60):
 
 def run_weather_app():
     def process_weather_data(locations):
-        # Record overall start time
-
-
         # Create windows for each location
         weather_windows = {}
         for location in locations:
@@ -102,37 +90,34 @@ def run_weather_app():
             periodic_weather_update(location, weather_windows[location], 60)
 
     def start_aggregation():
-        try:
-            # Cancel any existing timers
-            for timer in active_timers:
-                timer.cancel()
-            active_timers.clear()
+        # Cancel any existing timers
+        for timer in active_timers:
+            timer.cancel()
+        active_timers.clear()
 
-            num_threads = int(thread_input.get())
-            if 1 <= num_threads <= 4:
-                # Clear any previously entered location entries
-                for widget in location_entries_frame.winfo_children():
-                    widget.destroy()
+        num_threads = int(thread_input.get())
+        if 1 <= num_threads <= 4:
+            # Clear any previously entered location entries
+            for widget in location_entries_frame.winfo_children():
+                widget.destroy()
 
-                # Create new entry fields for the locations
-                location_entries = []
-                for i in range(num_threads):
-                    location_label = tk.Label(location_entries_frame, text=f"Location {i+1}:", font=("Arial", 12), bg="#f0f0f0")
-                    location_label.pack(pady=5)
+            # Create new entry fields for the locations
+            location_entries = []
+            for i in range(num_threads):
+                location_label = tk.Label(location_entries_frame, text=f"Location {i+1}:", font=("Arial", 12), bg="#f0f0f0")
+                location_label.pack(pady=5)
 
-                    location_entry = tk.Entry(location_entries_frame, font=("Arial", 12), width=20)
-                    location_entry.pack(pady=5)
-                    location_entries.append(location_entry)
+                location_entry = tk.Entry(location_entries_frame, font=("Arial", 12), width=20)
+                location_entry.pack(pady=5)
+                location_entries.append(location_entry)
 
-                submit_button = tk.Button(location_entries_frame, text="Fetch Weather Data", 
-                                          command=lambda: process_weather_data([entry.get() for entry in location_entries]), 
-                                          font=("Arial", 12, "bold"), bg="#2196F3", fg="white", padx=10, pady=5)
-                submit_button.pack(pady=20)
+            submit_button = tk.Button(location_entries_frame, text="Fetch Weather Data", 
+                                        command=lambda: process_weather_data([entry.get() for entry in location_entries]), 
+                                        font=("Arial", 12, "bold"), bg="#2196F3", fg="white", padx=10, pady=5)
+            submit_button.pack(pady=20)
 
-            else:
-                messagebox.showerror("Input Error", "Please enter a number between 1 and 4.")
-        except ValueError:
-            messagebox.showerror("Input Error", "Please enter a valid number.")
+        else:
+            messagebox.showerror("Input Error", "Please enter a number between 1 and 4.")
 
     # Setup the main GUI for the weather data aggregator
     root = tk.Tk()
