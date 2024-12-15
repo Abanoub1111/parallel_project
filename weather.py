@@ -3,9 +3,7 @@ from tkinter import Toplevel, messagebox
 import threading
 import requests
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# OpenWeatherMap API setup (replace with your own API key)
 API_KEY = "794eac17c9d7cb5fb86e532d70237cf8"
 BASE_URL = "http://api.openweathermap.org/data/2.5/weather"
 
@@ -28,26 +26,15 @@ def fetch_weather_with_timing(location):
         weather_data = (f"Location: {location}\n"
                         f"Temperature: {temperature}°C\n"
                         f"Humidity: {humidity}%\n"
-                        f"Pressure: {pressure}\n"
-                        f"Execution Time: {execution_time:.8f} seconds")
+                        f"Pressure: {pressure}\n")
     else:
         weather_data = f"Location: {location}\nError: Unable to fetch data."
-    return location, weather_data
+    return location, weather_data, execution_time
 
-def fetch_and_display_weather(location, weather_window):
-
-    # Fetch weather data with timing
-    weather_data = fetch_weather_with_timing(location)
-
-    # Check if the window still exists before updating
-    if weather_window.winfo_exists():
-        weather_window.config(bg="#f0f0f0")
-        weather_window.children["label"].config(text=weather_data)
 
 def periodic_weather_update(location, weather_window, interval=60):
     # Check if the window is still open before updating
     if weather_window.winfo_exists():
-        fetch_and_display_weather(location, weather_window)
         # Create a new timer and add it to the active timers list
         timer = threading.Timer(interval, periodic_weather_update, [location, weather_window, interval])
         active_timers.append(timer)
@@ -70,24 +57,43 @@ def run_weather_app():
 
             weather_windows[location] = weather_window
 
-        overall_start_time = time.time()
+        # Timing and thread management
         threads = []
+        thread_execution_times = []
+        thread_locations = []
+
+        # Start timing BEFORE creating threads
+        overall_start_time = time.time()
+
+        # Create and start threads
         for location in locations:
-            thread = threading.Thread(target=fetch_weather_with_timing, args=(location,))
+            thread = threading.Thread(target=lambda loc: thread_execution_times.append(fetch_weather_with_timing(loc)[2]), 
+                                      args=(location,))
+            thread_locations.append(location)
             threads.append(thread)
             thread.start()
 
+        # Wait for each thread
         for thread in threads:
             thread.join()
 
-        # Calculate and display overall execution time
+        # Calculate and display overall execution time AFTER all threads complete
         overall_end_time = time.time()
         overall_execution_time = overall_end_time - overall_start_time
-        print(overall_execution_time)
 
-        # Start periodic updates for each location's weather data
-        for location in locations:
-            periodic_weather_update(location, weather_windows[location], 60)
+        # Display results
+        print("\nIndividual Thread Execution Times:")
+        for loc, time_taken in zip(thread_locations, thread_execution_times):
+            print(f"{loc}: {time_taken:.4f} seconds")
+        
+        print(f"\nOverall Thread Execution Time: {overall_execution_time:.4f} seconds")
+
+        # Update weather windows with data
+        for location, weather_window in weather_windows.items():
+            # Fetch weather data again to update window
+            _, weather_data, _ = fetch_weather_with_timing(location)
+            if weather_window.winfo_exists():
+                weather_window.children["label"].config(text=weather_data)
 
     def start_aggregation():
         # Cancel any existing timers
@@ -96,7 +102,7 @@ def run_weather_app():
         active_timers.clear()
 
         num_threads = int(thread_input.get())
-        if 1 <= num_threads <= 4:
+        if 1 <= num_threads <= 20:
             # Clear any previously entered location entries
             for widget in location_entries_frame.winfo_children():
                 widget.destroy()
